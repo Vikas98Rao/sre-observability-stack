@@ -1,0 +1,84 @@
+# kube-prometheus-stack Helm values
+# Author: Vikas Rao | Senior DevOps Engineer
+
+prometheus:
+  prometheusSpec:
+    retention: 15d
+    retentionSize: 50GB
+    replicas: 2
+    podAntiAffinity: hard
+    resources:
+      requests:
+        memory: 4Gi
+        cpu: 500m
+      limits:
+        memory: 8Gi
+        cpu: 2000m
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: managed-premium
+          accessModes: ['ReadWriteOnce']
+          resources:
+            requests:
+              storage: 100Gi
+    additionalScrapeConfigs:
+      - job_name: 'blackbox-http'
+        metrics_path: /probe
+        params:
+          module: [http_2xx]
+        static_configs:
+          - targets:
+              - https://api.company.com/health
+              - https://app.company.com
+        relabel_configs:
+          - source_labels: [__address__]
+            target_label: __param_target
+          - target_label: __address__
+            replacement: blackbox-exporter:9115
+
+alertmanager:
+  config:
+    global:
+      resolve_timeout: 5m
+    route:
+      group_by: ['alertname', 'severity']
+      group_wait: 30s
+      group_interval: 5m
+      repeat_interval: 4h
+      receiver: 'pagerduty-critical'
+      routes:
+        - match:
+            severity: critical
+          receiver: pagerduty-critical
+        - match:
+            severity: high
+          receiver: pagerduty-high
+        - match:
+            severity: warning
+          receiver: slack-alerts
+    receivers:
+      - name: pagerduty-critical
+        pagerduty_configs:
+          - routing_key: PAGERDUTY_P1_KEY
+            severity: critical
+      - name: pagerduty-high
+        pagerduty_configs:
+          - routing_key: PAGERDUTY_P2_KEY
+            severity: error
+      - name: slack-alerts
+        slack_configs:
+          - api_url: SLACK_WEBHOOK_URL
+            channel: '#alerts-platform'
+
+grafana:
+  replicas: 2
+  adminPassword: GRAFANA_ADMIN_PASSWORD
+  persistence:
+    enabled: true
+    storageClassName: managed-premium
+    size: 10Gi
+  sidecar:
+    dashboards:
+      enabled: true
+      searchNamespace: ALL
