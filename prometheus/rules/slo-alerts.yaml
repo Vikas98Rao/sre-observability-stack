@@ -1,0 +1,74 @@
+# Prometheus Alerting Rules - Production SRE
+# Author: Vikas Rao | Senior DevOps Engineer
+
+groups:
+  - name: slo-alerts
+    interval: 30s
+    rules:
+      - alert: HighErrorRateCritical
+        expr: |
+          (
+            sum(rate(http_requests_total{status=~'5..'}[5m]))
+            /
+            sum(rate(http_requests_total[5m]))
+          ) > 0.05
+        for: 2m
+        labels:
+          severity: critical
+          team: platform
+        annotations:
+          summary: 'CRITICAL: Error rate exceeds 5% SLO'
+          runbook: 'https://wiki.company.com/runbooks/high-error-rate'
+          dashboard: 'https://grafana.company.com/d/api-slo'
+
+      - alert: HighLatencyP99
+        expr: |
+          histogram_quantile(0.99,
+            sum(rate(http_request_duration_seconds_bucket[5m])) by (le, service)
+          ) > 0.5
+        for: 5m
+        labels:
+          severity: high
+          team: platform
+        annotations:
+          summary: 'HIGH: p99 latency exceeds 500ms SLO'
+          runbook: 'https://wiki.company.com/runbooks/high-latency'
+
+      - alert: PodCrashLooping
+        expr: rate(kube_pod_container_status_restarts_total[15m]) * 60 * 15 > 3
+        for: 0m
+        labels:
+          severity: high
+          team: platform
+        annotations:
+          summary: 'HIGH: Pod is crash-looping'
+          runbook: 'https://wiki.company.com/runbooks/pod-crashloop'
+
+      - alert: HighMemoryUsage
+        expr: |
+          (
+            container_memory_working_set_bytes{container!=''}
+            /
+            container_spec_memory_limit_bytes{container!=''}
+          ) > 0.85
+        for: 10m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: 'WARNING: Container memory usage above 85%'
+
+      - alert: ErrorBudgetBurnRateFast
+        expr: |
+          (
+            sum(rate(http_requests_total{status=~'5..'}[1h]))
+            /
+            sum(rate(http_requests_total[1h]))
+          ) > (14.4 * 0.0005)
+        for: 2m
+        labels:
+          severity: critical
+          team: platform
+        annotations:
+          summary: 'CRITICAL: Fast error budget burn at 14.4x rate'
+          runbook: 'https://wiki.company.com/runbooks/error-budget-burn'
